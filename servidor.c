@@ -194,7 +194,7 @@ int main() {
         continue;			// nao existem mais descritores para serem lidos
     }
 
-    pairTime vetorN[cliente_num][2], vetorS[cliente_num][2], pair vetorL[cliente_num][2], pair vetorO[cliente_num][2];
+    pairTime vetorN[cliente_num][2], vetorS[cliente_num][2], vetorL[cliente_num][2], vetorO[cliente_num][2];
 
     cruzamento carrosnaposicao00[cliente_num], carrosnaposicao01[cliente_num], carrosnaposicao10[cliente_num], carrosnaposicao11[cliente_num];
     int sizeCar00 = 0, sizeCar01 = 0, sizeCar10 = 0, sizeCar11 = 0;
