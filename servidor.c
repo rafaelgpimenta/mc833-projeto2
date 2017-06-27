@@ -19,12 +19,12 @@ typedef enum direcao {N,S,L,O} direcao;
 typedef enum { false, true } bool;
 typedef enum { seguranca, entreterimento, conforto } tipoServico;
 
-typedef pairTime {
+typedef struct pairTime {
   double inicio;
   double fim;
   int ID;
   unsigned short int velocidade;
-} pair;
+} pairTime;
 
 typedef struct pacote{
   time_t timestamp;
@@ -194,7 +194,7 @@ int main() {
         continue;			// nao existem mais descritores para serem lidos
     }
 
-    pairTime vetorN[cliente_num][2], vetorS[cliente_num][2], pair vetorL[cliente_num][2], pair vetorO[cliente_num][2];
+    pairTime vetorN[cliente_num][2], vetorS[cliente_num][2], vetorL[cliente_num][2],vetorO[cliente_num][2];
 
     cruzamento carrosnaposicao00[cliente_num], carrosnaposicao01[cliente_num], carrosnaposicao10[cliente_num], carrosnaposicao11[cliente_num];
     int sizeCar00 = 0, sizeCar01 = 0, sizeCar10 = 0, sizeCar11 = 0;
@@ -371,11 +371,40 @@ int main() {
 
     // TRETA
     for (int i = 0; i < sizeL; i++) {
-      evitarColisao(vetorL[i][0], vetorNeS, sizeNeS)
+      evitarColisao(vetorL, vetorN, sizeN, vetorS, sizeS, i);
     }
 
 
   }
 
   return 0;
+}
+
+void evitarColisao(pairTime& (*vetor)[2], pairTime& (*vetorN)[2], int sizeN, pairTime& (*vetorS)[2], int sizeS, int cl) {
+  // carro indo para sul
+  for(int i = 0; i < sizeS; i++) {
+    // ou o carro indo para o L chega primeiro e depois o vindo do S ou ao contrario em 00
+    if ((vetor[cl][0].inicio <= vetorS[i][0].inicio && vetor[cl][0].fim >= vetorS[i][0].fim) ||
+        (vetorS[i][0].inicio <= vetor[cl][0].inicio && vetorS[i][0].fim >= vetor[cl][0].fim)) {
+        //verificar se nao vai bater com quem esta indo para o norte 10
+        for(int j = 0; j < sizeN; j++) {
+          // ou o carro indo para o L chega primeiro e depois o vindo do N ou ao contrario em 10
+          if ((vetor[cl][1].inicio <= vetorN[i][0].inicio && vetor[cl][1].fim >= vetorN[i][0].fim) ||
+              (vetorN[i][0].inicio <= vetor[cl][1].inicio && vetorN[i][0].fim >= vetor[cl][1].fim)) {
+                //verificar quanto precisa desacelerar para nao bater nem 00 nem em10
+                // comparar a desaceleracao, usar a maior
+              }
+
+        }
+    }
+    // se o carro do sul chegar e o carro do leste ja estava
+    else if (leste.inicio <= NouS[i][0].inicio && leste.fim <= NouS[i][0].fim) {
+
+    }
+    // se o do leste chegar e o carro do sul ja estava
+    else if (leste.inicio >= NouS[i][0].inicio && leste.fim >= NouS[i][0].fim) {
+
+    }
+
+  }
 }
