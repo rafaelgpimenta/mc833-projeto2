@@ -42,6 +42,11 @@ typedef struct cliente{
   bool recebido;
 } cliente;
 
+typedef struct cruzamento{
+  int descritor;
+  direcao d;
+} cruzamento;
+
 int infoPeer(int new_s){
   struct sockaddr_storage addr;
   socklen_t lenPeer = sizeof(addr);
@@ -95,7 +100,7 @@ int removeCarro(pairTime& (*vetor)[2], int size, int sockfd){
   return removeu;
 }
 
-bool buscarAlteracao (pairTime& (*vetor)[2], int size, pairTime verifica) {
+bool buscarAlteracao (pairTime& (*vetor)[2], int& size, pairTime verifica) {
   bool alteracao = true;
 
   for (int i = 0; i < size; i++) {
@@ -105,7 +110,7 @@ bool buscarAlteracao (pairTime& (*vetor)[2], int size, pairTime verifica) {
   }
 
   if (alteracao)
-    removeCarro(vetor, size, verifica.ID)
+    size -= removeCarro(vetor, size, verifica.ID)
 
   return alteracao;
 }
@@ -152,7 +157,7 @@ int main() {
   FD_SET(s, &todos_fds);
 
 
-  int sizeNeS = 0, sizeL = 0, sizeO = 0;
+  int sizeN = 0, sizeS = 0, sizeL = 0, sizeO = 0;
   /* espera conexao, recebe, imprime texto e envia resposta */
   while(1) {
     novo_set = todos_fds;
@@ -189,9 +194,9 @@ int main() {
         continue;			// nao existem mais descritores para serem lidos
     }
 
-    pairTime vetorNeS[cliente_num][2], pair vetorL[cliente_num][2], pair vetorO[cliente_num][2];
+    pairTime vetorN[cliente_num][2], vetorS[cliente_num][2], pair vetorL[cliente_num][2], pair vetorO[cliente_num][2];
 
-    int carrosnaposicao00[cliente_num], carrosnaposicao01[cliente_num], carrosnaposicao10[cliente_num], carrosnaposicao11[cliente_num];
+    cruzamento carrosnaposicao00[cliente_num], carrosnaposicao01[cliente_num], carrosnaposicao10[cliente_num], carrosnaposicao11[cliente_num];
     int sizeCar00 = 0, sizeCar01 = 0, sizeCar10 = 0, sizeCar11 = 0;
     for (i = 0; i <= cliente_num; i++) {	// verificar se há dados em todos os clientes
       c[i].recebeu = false;
@@ -199,8 +204,10 @@ int main() {
         continue;
       if (FD_ISSET(sockfd, &novo_set)) {
         if ( (len = recv(sockfd, (char*)&buf, sizeof(buf), 0)) == 0) {
-          if (removeCarro(vetorNeS, sizeNeS, sockfd))
+          if (removeCarro(vetorN, sizeN, sockfd))
             sizeNeS -= 1;
+          else if (removeCarro(vetorS, sizeS, sockfd))
+            sizeL -= 1;
           else if (removeCarro(vetorL, sizeL, sockfd))
             sizeL -= 1;
           else
@@ -229,44 +236,52 @@ int main() {
           case N:
             if (((int)buf.pos) == 0) {
               /* posicao 1,0 ocupada*/
-              carrosnaposicao10[sizeCar10] = sockfd;
+              carrosnaposicao10[sizeCar10].descritor = sockfd;
+              carrosnaposicao10[sizeCar10].d = N;
               sizeCar10++;
             } else if (((int)buf.pos) == 1) {
               /* posicao 1,1 ocupada */
-              carrosnaposicao11[sizeCar11] = sockfd;
+              carrosnaposicao11[sizeCar11].descritor = sockfd;
+              carrosnaposicao11[sizeCar11].d = N;
               sizeCar11++;
             }
             break;
           case S:
             if (((int)buf.pos) == 0) {
               /* posicao 0,0 ocupada */
-              carrosnaposicao00[sizeCar00] = sockfd;
+              carrosnaposicao00[sizeCar00].descritor = sockfd;
+              carrosnaposicao00[sizeCar00].d = N;
               sizeCar00++;
             }else if (((int)buf.pos) == 1) {
               /* posicao 0,1 ocupada */
-              carrosnaposicao01[sizeCar01] = sockfd;
+              carrosnaposicao01[sizeCar01].descritor = sockfd;
+              carrosnaposicao01[sizeCar01].d = N;
               sizeCar01++;
             }
             break;
           case L:
             if (((int)buf.pos) == 0) {
               /* posicao 0,0 ocupada */
-              carrosnaposicao00[sizeCar00] = sockfd;
+              carrosnaposicao00[sizeCar00].descritor = sockfd;
+              carrosnaposicao00[sizeCar00].d = N;
               sizeCar00++;
             }else if (((int)buf.pos) == 1) {
               /* posicao 1,0 ocupada */
-              carrosnaposicao10[sizeCar10] = sockfd;
+              carrosnaposicao10[sizeCar10].descritor = sockfd;
+              carrosnaposicao10[sizeCar10].d = N;
               sizeCar10++;
             }
             break;
           case O:
             if (((int)buf.pos) == 0) {
               /* posicao 0,1 ocupada */
-              carrosnaposicao01[sizeCar01] = sockfd;
+              carrosnaposicao01[sizeCar01].descritor = sockfd;
+              carrosnaposicao01[sizeCar01].d = N;
               sizeCar01++;
             }else if (((int)buf.pos) == 1) {
               /* posicao 1,1 ocupada */
-              carrosnaposicao11[sizeCar11] = sockfd;
+              carrosnaposicao11[sizeCar11].descritor = sockfd;
+              carrosnaposicao11[sizeCar11].d = N;
               sizeCar11++;
             }
             break;
@@ -294,37 +309,54 @@ int main() {
 
         // ja passou do cruzamento esquece esse carro
         if (verifica[0].fim < 0 && verifica[1].fim < 0) {
-          if (removeCarro(vetorNeS, sizeNeS, sockfd))
-            sizeNeS -= 1;
-          else if (removeCarro(vetorL, sizeL, sockfd))
-            sizeL -= 1;
-          else
-            sizeO -= removeCarro(vetorO, sizeO, sockfd);
-
+          switch (buf.d) {
+            case N:
+              sizeN -= removeCarro(vetorN, sizeN, sockfd);
+            break;
+            case S:
+              sizeS -= removeCarro(vetorS, sizeS, sockfd);
+            break;
+            case L:
+              sizeL -= removeCarro(vetorL, sizeL, sockfd);
+            break;
+            case O:
+              sizeO -= removeCarro(vetorO, sizeO, sockfd);
+            break;
+          }
           continue;
         }
-        if (buf.d == N || buf.d == S) {
-          // ver se alguem mudou o tempo de chegada ao cruzamento
-          if(buscarAlteracao(vetorNeS, sizeNeS, verifica, buf.d)){
-            insereNS(vetorNeS, sizeNeS, verifica[0], 0);
-            insereNS(vetorNeS, sizeNeS, verifica[1], 1);
-            sizeNeS += 1;
-          }
-        }
-        else if (buf.d == L) {
-          if(buscarAlteracao(vetorL, sizeL, verifica, L)){
-            insereLO(vetorL, sizeL, verifica[0], 0);
-            insereNS(vetorL, sizeL, verifica[1], 1);
-            sizeL += 1;
-          }
-        } else {
-          if(buscarAlteracao(vetorO, sizeO, verifica, O)){
-            insereLO(vetorO, sizeO, verifica[0], 0);
-            insereNS(vetorO, sizeO, verifica[1], 1);
-            sizeO += 1;
-          }
-        }
 
+        switch (buf.d) {
+          case N:
+            // ver se alguem mudou o tempo de chegada ao cruzamento
+            if(buscarAlteracao(vetorN, sizeN, verifica, N)){
+              insereNS(vetorN, sizeN, verifica[0], 0);
+              insereNS(vetorN, sizeN, verifica[1], 1);
+              sizeN += 1;
+            }
+            break;
+          case S:
+            if(buscarAlteracao(vetorS, sizeS, verifica, S)){
+              insereNS(vetorS, sizeS, verifica[0], 0);
+              insereNS(vetorS, sizeS, verifica[1], 1);
+              sizeS += 1;
+            }
+            break;
+          case L:
+            if(buscarAlteracao(vetorL, sizeL, verifica, L)){
+              insereLO(vetorL, sizeL, verifica[0], 0);
+              insereLO(vetorL, sizeL, verifica[1], 1);
+              sizeL += 1;
+            }
+            break;
+          case O:
+            if(buscarAlteracao(vetorO, sizeO, verifica, O)){
+              insereLO(vetorO, sizeO, verifica[0], 0);
+              insereLO(vetorO, sizeO, verifica[1], 1);
+              sizeO += 1;
+            }
+            break;
+        }
 
 
       }
