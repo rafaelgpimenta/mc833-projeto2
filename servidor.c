@@ -407,4 +407,4 @@ void evitarColisao(pairTime& (*vetor)[2], pairTime& (*vetorN)[2], int sizeN, pai
     }
 
   }
-}
+} 
