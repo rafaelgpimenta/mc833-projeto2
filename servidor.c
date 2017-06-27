@@ -250,12 +250,12 @@ int main() {
             if (((int)buf.pos) == 0) {
               /* posicao 0,0 ocupada */
               carrosnaposicao00[sizeCar00].descritor = sockfd;
-              carrosnaposicao00[sizeCar00].d = N;
+              carrosnaposicao00[sizeCar00].d = S;
               sizeCar00++;
             }else if (((int)buf.pos) == 1) {
               /* posicao 0,1 ocupada */
               carrosnaposicao01[sizeCar01].descritor = sockfd;
-              carrosnaposicao01[sizeCar01].d = N;
+              carrosnaposicao01[sizeCar01].d = S;
               sizeCar01++;
             }
             break;
@@ -263,12 +263,12 @@ int main() {
             if (((int)buf.pos) == 0) {
               /* posicao 0,0 ocupada */
               carrosnaposicao00[sizeCar00].descritor = sockfd;
-              carrosnaposicao00[sizeCar00].d = N;
+              carrosnaposicao00[sizeCar00].d = L;
               sizeCar00++;
             }else if (((int)buf.pos) == 1) {
               /* posicao 1,0 ocupada */
               carrosnaposicao10[sizeCar10].descritor = sockfd;
-              carrosnaposicao10[sizeCar10].d = N;
+              carrosnaposicao10[sizeCar10].d = L;
               sizeCar10++;
             }
             break;
@@ -276,12 +276,12 @@ int main() {
             if (((int)buf.pos) == 0) {
               /* posicao 0,1 ocupada */
               carrosnaposicao01[sizeCar01].descritor = sockfd;
-              carrosnaposicao01[sizeCar01].d = N;
+              carrosnaposicao01[sizeCar01].d = O;
               sizeCar01++;
             }else if (((int)buf.pos) == 1) {
               /* posicao 1,1 ocupada */
               carrosnaposicao11[sizeCar11].descritor = sockfd;
-              carrosnaposicao11[sizeCar11].d = N;
+              carrosnaposicao11[sizeCar11].d = O;
               sizeCar11++;
             }
             break;
