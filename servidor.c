@@ -24,7 +24,7 @@ typedef pairTime {
   double fim;
   int ID;
   unsigned short int velocidade;
-} pair;
+} pairTime;
 
 typedef struct pacote{
   time_t timestamp;
