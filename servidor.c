@@ -10,6 +10,7 @@
 #include <sys/time.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include<pthread.h>
 
 #define LISTEN_PORT 12345
 #define MAX_PENDING 100
@@ -17,7 +18,7 @@
 
 typedef enum direcao {N,S,L,O} direcao;
 typedef enum { false, true } bool;
-typedef enum { seguranca, entreterimento, conforto } tipoServico;
+typedef enum { SEGURANCA, ENTRETERIMENTO, CONFORTO } tipoServico;
 
 typedef struct pairTime {
   double inicio;
@@ -115,16 +116,20 @@ bool buscarAlteracao (pairTime (*vetor)[2], int* size, pairTime verifica[2]) {
   return alteracao;
 }
 
-void evitarColisao(pairTime (*vetor)[2], pairTime (*vetorN)[2], int sizeN, pairTime (*vetorS)[2], int sizeS, int cl, int flag) {
+void evitarColisao(pairTime (*vetor)[2], pairTime (*vetorN)[2], int sizeN, pairTime (*vetorS)[2], int sizeS, int cl, int flag, int sockfd) {
+  pacote mensagem;
   // carro indo para sul
   for(int i = 0; i < sizeS; i++) {
     // ou o carro indo para o L chega primeiro e depois o vindo do S ou ao contrario em 00
     // se o carro do sul chegar e o carro do leste ja estava
     // se o do leste chegar e o carro do sul ja estava
     if ((vetor[cl][0].inicio <= vetorS[i][flag].inicio && vetor[cl][0].fim >= vetorS[i][flag].fim) ||
-    (vetorS[i][flag].inicio <= vetor[cl][0].inicio && vetorS[i][flag].fim >= vetor[cl][0].fim) ||
-    (vetor[cl][0].inicio <= vetorS[i][flag].inicio && vetor[cl][0].fim <= vetorS[i][flag].fim) ||
-    (vetor[cl][0].inicio >= vetorS[i][flag].inicio && vetor[cl][0].fim >= vetorS[i][flag].fim)) {
+        (vetorS[i][flag].inicio <= vetor[cl][0].inicio && vetorS[i][flag].fim >= vetor[cl][0].fim) ||
+        (vetor[cl][0].inicio <= vetorS[i][flag].inicio && vetor[cl][0].fim <= vetorS[i][flag].fim) ||
+        (vetor[cl][0].inicio >= vetorS[i][flag].inicio && vetor[cl][0].fim >= vetorS[i][flag].fim)) {
+          strcpy(mensagem.msg, "freie");
+          send(sockfd, (char*)&mensagem, sizeof(mensagem), 0);
+
       // printf("PARAAAAAAAAA!\n");
     }
 
@@ -136,19 +141,30 @@ void evitarColisao(pairTime (*vetor)[2], pairTime (*vetorN)[2], int sizeN, pairT
     // ou o carro do sul chegar e o carro do leste ja estava
     // ou o do leste chegar e o carro do sul ja estava
     if ((vetor[cl][1].inicio <= vetorN[i][flag].inicio && vetor[cl][1].fim >= vetorN[i][flag].fim) ||
-    (vetorN[i][flag].inicio <= vetor[cl][1].inicio && vetorN[i][flag].fim >= vetor[cl][1].fim) ||
-    (vetor[cl][1].inicio <= vetorN[i][flag].inicio && vetor[cl][1].fim <= vetorN[i][flag].fim) ||
-    (vetor[cl][1].inicio >= vetorN[i][flag].inicio && vetor[cl][1].fim >= vetorN[i][flag].fim)) {
-      // printf("PARAAAAAAAAA!\n");
-
+        (vetorN[i][flag].inicio <= vetor[cl][1].inicio && vetorN[i][flag].fim >= vetor[cl][1].fim) ||
+        (vetor[cl][1].inicio <= vetorN[i][flag].inicio && vetor[cl][1].fim <= vetorN[i][flag].fim) ||
+        (vetor[cl][1].inicio >= vetorN[i][flag].inicio && vetor[cl][1].fim >= vetorN[i][flag].fim)) {
+          strcpy(mensagem.msg, "freie");
+          send(sockfd, (char*)&mensagem, sizeof(mensagem), 0);
     }
-
-
   }
 }
 
+void* divirta_se(void* sockfd) {
+  char msg[MAX_LINE];
+  strcpy(msg, "Sinta-se feliz.");
+  send((int *)sockfd, msg, sizeof(msg), 0);
+  usleep(100000);
+  pthread_exit(NULL);
+}
 
-
+void* coforte_se(void* sockfd) {
+  char msg[MAX_LINE];
+  strcpy(msg, "Sinta-se confortavel.");
+  send((int *)sockfd, msg, sizeof(msg), 0);
+  usleep(100000);
+  pthread_exit(NULL);
+}
 int main() {
   struct sockaddr_in socket_address;
   pacote buf;
@@ -255,6 +271,14 @@ int main() {
           FD_CLR(sockfd, &todos_fds);
           c[i].descritor = -1;
       } else {
+        pthread_t my_thread;
+        if (buf.tipo == ENTRETERIMENTO) {
+          pthread_create(&my_thread, NULL, divirta_se, (void *)&sockfd);
+        }
+        else if (buf.tipo == CONFORTO) {
+          pthread_create(&my_thread, NULL, conforte_se, (void *)&sockfd);
+        }
+        usleep(10000);
         pairTime verifica[2];
         double distancia, dv;
         // struct tm * timeinfo;
@@ -333,7 +357,7 @@ int main() {
         distancia = (buf.d == N || buf.d == L) ? - buf.pos : buf.pos;
         dv = 1 / buf.velocidade;
         //carros em direcao ao norte e leste atigem ponto 0 primeiro (na visao de suas respectivas coordenadas)
-        verifica[0].inicio = buf.timestamp + ((buf.d == N || buf.d == L) ?  distancia / buf.velocidade
+        verifica[0].inicio = buf. + ((buf.d == N || buf.d == L) ?  distancia / buf.velocidade
                                                       : (distancia + 1) / buf.velocidade);
         verifica[0].fim    = buf.timestamp + ((buf.d == N || buf.d == L) ? (distancia + buf.tam) / buf.velocidade
                                                       : (distancia + buf.tam + 1) / buf.velocidade);
@@ -417,7 +441,7 @@ int main() {
       }
       else{
         if (carrosnaposicao00[i].d != dir) {
-          printf("bateu!!00\n");
+          printf("chame a ambulancia\n");
         }
       }
     }
@@ -428,7 +452,7 @@ int main() {
       }
       else{
         if (carrosnaposicao01[i].d != dir) {
-          printf("bateu!!01\n");
+          printf("chame a ambulancia\n");
         }
       }
     }
@@ -439,7 +463,7 @@ int main() {
       }
       else{
         if (carrosnaposicao10[i].d != dir) {
-          printf("bateu!!10\n");
+          printf("chame a ambulancia\n");
         }
       }
     }
@@ -450,7 +474,7 @@ int main() {
       }
       else{
         if (carrosnaposicao11[i].d != dir) {
-          printf("bateu!!11\n");
+          printf("chame a ambulancia\n");
         }
       }
     }
@@ -459,10 +483,10 @@ int main() {
 
     for (int i = 0; i < sizeL; i++) {
       //flag = 0 leste
-      evitarColisao(vetorL, vetorN, sizeN, vetorS, sizeS, i, 0);
+      evitarColisao(vetorL, vetorN, sizeN, vetorS, sizeS, i, 0, sockfd);
     }
     for (int i = 0; i < sizeO; i++) {
-      evitarColisao(vetorO, vetorN, sizeN, vetorS, sizeS, i, 1);
+      evitarColisao(vetorO, vetorN, sizeN, vetorS, sizeS, i, 1, sockfd);
     }
 
 

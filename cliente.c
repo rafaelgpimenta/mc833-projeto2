@@ -114,11 +114,16 @@ int main(int argc, char * argv[])
 
     buf = gerarCarro();
     while (1) {
+      time_t antes,depois;
+      time ( &(antes) );
       send(s, (char*)&buf, sizeof(buf), 0);
-      // recv(s, (char*)&buf, sizeof(buf), 0);
-      // printf("Eco: %s\n", buf.msg);
+      recv(s, (char*)&buf, sizeof(buf), 0);
+      time ( &(depois) );
+      printf("Eco: %s\n", buf.msg);
 
-      usleep(1000);
+      if (buf.msg == "freie") {
+        buf.velocidade = 0;
+      }
 
       if (buf.d == N || buf.d == L) {
 
@@ -129,7 +134,7 @@ int main(int argc, char * argv[])
         if (buf.pos - (double)buf.tam > 0) {
           break;
         }
-        /* code */
+
       }
       else{
         buf.pos -= buf.velocidade*(0.01);
