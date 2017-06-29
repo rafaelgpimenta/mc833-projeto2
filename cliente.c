@@ -12,11 +12,11 @@
 #define MAX_LINE 32
 
 typedef enum direcao {N,S,L,O} direcao;
-
+typedef enum { seguranca, entreterimento, conforto } tipoServico;
 typedef struct pacote{
     time_t timestamp;
     double pos; // -30 a 31m (cruzamento nas posições 0 e 1)
-    unsigned short int velocidade; // de 0 a 33m/s
+    int velocidade; // de 0 a 33m/s
     unsigned short int tam; //de 1 a 30m
     direcao d; //norte, sul, leste, oeste
     tipoServico tipo;
@@ -25,25 +25,33 @@ typedef struct pacote{
 
 pacote gerarCarro(){
   short int pos;
-  unsigned short int velocidade, tam;
+  int velocidade, tam;
   direcao d;
   pacote p;
+  unsigned int randval;
+  FILE *f;
 
-  srand( (unsigned)time(NULL) );
+  f = fopen("/dev/random", "r");
+  fread(&randval, sizeof(randval), 1, f);
+  fclose(f);
+
+  srand( randval );
   d = rand() % 4;
 
   if (d == N || d == L)
-    pos = -30;
+    pos = -300;
   else
-    pos = 31;
+    pos = 301;
 
   velocidade = 5 + (rand() % 29);
+  printf("VELOCIDADE: %d\n", velocidade);
   tam = 1 + (rand() % 30);
 
   p.pos = pos;
   p.velocidade = velocidade;
   p.tam = tam;
   p.d = d;
+  p.tipo = seguranca;
   memset(p.msg, '\0', sizeof(p.msg));
   time ( &(p.timestamp) );
   return p;
@@ -58,7 +66,13 @@ int main(int argc, char * argv[])
     int s;
     int len;
 
-
+    int pid;
+    //so envia pacote colisao se nao passou pelo cruzamento
+    for (int i = 0; i < 50; i++) {
+      pid = fork();
+      if (pid == 0)
+        break;
+    }
 	 /* verificação de argumentos */
 	 if (argc != 2) {
         printf("Numero incorreto de argumentos\n");
@@ -97,13 +111,35 @@ int main(int argc, char * argv[])
         printf("Erro no estabelecimento da conexao\n");
         return -1;
     }
-    //so envia pacote colisao se nao passou pelo cruzamento
+
     buf = gerarCarro();
     while (1) {
-      send(s, (char*)&buf, len, 0);
-      recv(s, (char*)&buf, sizeof(buf), 0);
-      printf("Eco: %s\n", buf.msg);
-      sleep(10);
+      send(s, (char*)&buf, sizeof(buf), 0);
+      // recv(s, (char*)&buf, sizeof(buf), 0);
+      // printf("Eco: %s\n", buf.msg);
+
+      usleep(1000);
+
+      if (buf.d == N || buf.d == L) {
+
+        buf.pos += buf.velocidade*(0.01);
+        // printf("Direcao: %d\n", buf.d);
+        // printf("pos traseira: %f\n", buf.pos - (double)buf.tam);
+        // printf("velocidade %d\n", buf.velocidade);
+        if (buf.pos - (double)buf.tam > 0) {
+          break;
+        }
+        /* code */
+      }
+      else{
+        buf.pos -= buf.velocidade*(0.01);
+        // printf("Direcao: %d\n", buf.d);
+        // printf("pos traseira: %f\n", buf.pos + (double)buf.tam);
+        // printf("velocidade %d\n", buf.velocidade);
+        if (buf.pos + (double)buf.tam < 0) {
+          break;
+        }
+      }
     }
 
     close(s);
