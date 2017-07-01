@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 199309L
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <strings.h>
@@ -10,10 +12,11 @@
 #include <sys/time.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include "params.h"
 #include<pthread.h>
 
 #define LISTEN_PORT 12345
-#define MAX_PENDING 100
+#define MAX_PENDING 400
 #define MAX_LINE 32
 
 typedef enum direcao {N,S,L,O} direcao;
@@ -28,7 +31,7 @@ typedef struct pairTime {
 } pairTime;
 
 typedef struct pacote{
-  time_t timestamp;
+  struct timespec timestamp;
   double pos; // -30 a 31m (cruzamento nas posições 0 e 1)
   int velocidade; // de 0 a 33m/s
   unsigned short int tam; //de 1 a 30m
@@ -116,8 +119,7 @@ bool buscarAlteracao (pairTime (*vetor)[2], int* size, pairTime verifica[2]) {
   return alteracao;
 }
 
-void evitarColisao(pairTime (*vetor)[2], pairTime (*vetorN)[2], int sizeN, pairTime (*vetorS)[2], int sizeS, int cl, int flag, int sockfd) {
-  pacote mensagem;
+int evitarColisao(pairTime (*vetor)[2], pairTime (*vetorN)[2], int sizeN, pairTime (*vetorS)[2], int sizeS, int cl, int flag, int sockfd) {
   // carro indo para sul
   for(int i = 0; i < sizeS; i++) {
     // ou o carro indo para o L chega primeiro e depois o vindo do S ou ao contrario em 00
@@ -127,10 +129,8 @@ void evitarColisao(pairTime (*vetor)[2], pairTime (*vetorN)[2], int sizeN, pairT
         (vetorS[i][flag].inicio <= vetor[cl][0].inicio && vetorS[i][flag].fim >= vetor[cl][0].fim) ||
         (vetor[cl][0].inicio <= vetorS[i][flag].inicio && vetor[cl][0].fim <= vetorS[i][flag].fim) ||
         (vetor[cl][0].inicio >= vetorS[i][flag].inicio && vetor[cl][0].fim >= vetorS[i][flag].fim)) {
-          strcpy(mensagem.msg, "freie");
-          send(sockfd, (char*)&mensagem, sizeof(mensagem), 0);
-
-      // printf("PARAAAAAAAAA!\n");
+          removeCarro(vetorS,sizeS,vetorS[i][flag].ID);
+          return 1;
     }
 
   }
@@ -144,27 +144,38 @@ void evitarColisao(pairTime (*vetor)[2], pairTime (*vetorN)[2], int sizeN, pairT
         (vetorN[i][flag].inicio <= vetor[cl][1].inicio && vetorN[i][flag].fim >= vetor[cl][1].fim) ||
         (vetor[cl][1].inicio <= vetorN[i][flag].inicio && vetor[cl][1].fim <= vetorN[i][flag].fim) ||
         (vetor[cl][1].inicio >= vetorN[i][flag].inicio && vetor[cl][1].fim >= vetorN[i][flag].fim)) {
-          strcpy(mensagem.msg, "freie");
-          send(sockfd, (char*)&mensagem, sizeof(mensagem), 0);
+          // strcpy(mensagem, "freie");
+          // send(sockfd, mensagem, sizeof(mensagem), 0);
+          // printf("PARAAAAAAAAA!\n");
+          removeCarro(vetorN,sizeN,vetorN[i][flag].ID);
+          return 2;
     }
   }
+  return 0;
 }
 
 void* divirta_se(void* sockfd) {
   char msg[MAX_LINE];
   strcpy(msg, "Sinta-se feliz.");
-  send((int *)sockfd, msg, sizeof(msg), 0);
+  send(*(int *)sockfd, msg, sizeof(msg), 0);
   usleep(100000);
   pthread_exit(NULL);
 }
 
-void* coforte_se(void* sockfd) {
+void* conforte_se(void* sockfd) {
   char msg[MAX_LINE];
   strcpy(msg, "Sinta-se confortavel.");
-  send((int *)sockfd, msg, sizeof(msg), 0);
+  send(*(int *)sockfd, msg, sizeof(msg), 0);
   usleep(100000);
   pthread_exit(NULL);
 }
+
+void bateu(int sockfd) {
+  char msg[MAX_LINE];
+  strcpy(msg, "bateu");
+  send(sockfd, msg, sizeof(msg), 0);
+}
+
 int main() {
   struct sockaddr_in socket_address;
   pacote buf;
@@ -254,6 +265,8 @@ int main() {
         continue;
       if (FD_ISSET(sockfd, &novo_set)) {
         if ( (len = recv(sockfd, &buf, sizeof(buf), 0)) == 0) {
+          printf("removeu Carro\n");
+
           if (removeCarro(vetorN, sizeN, sockfd) != 0){
             printf("removeu Carro N\n");
             sizeN -= 1;
@@ -281,16 +294,9 @@ int main() {
         usleep(10000);
         pairTime verifica[2];
         double distancia, dv;
-        // struct tm * timeinfo;
-        //recebeu pacote de i
-        // c[i].pacote = buf;
         c[i].recebeu = true;
         // infoPeer(sockfd);
-        // printf("velocidade do cliente: %d\n", buf.velocidade);
-        // timeinfo = localtime ( &(buf.timestamp) );
-        // printf ("relogio do cliente: %s\n", asctime (timeinfo) );
-        strcpy(buf.msg, "parabains");
-        send(sockfd, (char*)&buf, sizeof(buf), 0);
+        printf("velocidade do cliente: %d\n", buf.velocidade);
 
         switch (buf.d) {
           case N:
@@ -356,24 +362,29 @@ int main() {
         verifica[0].velocidade = verifica[1].velocidade = buf.velocidade;
         distancia = (buf.d == N || buf.d == L) ? - buf.pos : buf.pos;
         dv = 1 / buf.velocidade;
+
+        double timestampSEC = (double)((buf.timestamp).tv_sec) + (double)((buf.timestamp).tv_nsec) / 1.0e9;
+
         //carros em direcao ao norte e leste atigem ponto 0 primeiro (na visao de suas respectivas coordenadas)
-        verifica[0].inicio = buf. + ((buf.d == N || buf.d == L) ?  distancia / buf.velocidade
+        verifica[0].inicio = timestampSEC + ((buf.d == N || buf.d == L) ?  distancia / buf.velocidade
                                                       : (distancia + 1) / buf.velocidade);
-        verifica[0].fim    = buf.timestamp + ((buf.d == N || buf.d == L) ? (distancia + buf.tam) / buf.velocidade
+        verifica[0].fim    = timestampSEC + ((buf.d == N || buf.d == L) ? (distancia + buf.tam) / buf.velocidade
                                                       : (distancia + buf.tam + 1) / buf.velocidade);
         //carros em direcao ao norte e leste atigem ponto 0 primeiro (na visao de suas respectivas coordenadas)
-        verifica[1].inicio = buf.timestamp + ((buf.d == N || buf.d == L) ? verifica[0].inicio + dv
+        verifica[1].inicio = timestampSEC + ((buf.d == N || buf.d == L) ? verifica[0].inicio + dv
                                                       : verifica[0].inicio - dv);
-        verifica[1].fim    = buf.timestamp + ((buf.d == N || buf.d == L) ? verifica[0].fim + dv
+        verifica[1].fim    = timestampSEC + ((buf.d == N || buf.d == L) ? verifica[0].fim + dv
                                                       : verifica[0].fim - dv);
 
         // ja passou do cruzamento esquece esse carro
         if (verifica[0].fim < 0 && verifica[1].fim < 0) {
           switch (buf.d) {
             case N:
+            printf("N passou do cruzamento\n");
               sizeN -= removeCarro(vetorN, sizeN, sockfd);
             break;
             case S:
+            printf("S passou do cruzamento\n");
               sizeS -= removeCarro(vetorS, sizeS, sockfd);
             break;
             case L:
@@ -390,6 +401,7 @@ int main() {
           case N:
             // ver se alguem mudou o tempo de chegada ao cruzamento
             if(buscarAlteracao(vetorN, &sizeN, verifica)){
+              printf("MUDOU N\n");
               insereNS(vetorN, sizeN, verifica[0], 0);
               insereNS(vetorN, sizeN, verifica[1], 1);
               sizeN += 1;
@@ -397,6 +409,8 @@ int main() {
             break;
           case S:
             if(buscarAlteracao(vetorS, &sizeS, verifica)){
+              printf("MUDOU S\n");
+
               insereNS(vetorS, sizeS, verifica[0], 0);
               insereNS(vetorS, sizeS, verifica[1], 1);
               sizeS += 1;
@@ -404,6 +418,8 @@ int main() {
             break;
           case L:
             if(buscarAlteracao(vetorL, &sizeL, verifica)){
+              printf("MUDOU L\n");
+
               insereLO(vetorL, sizeL, verifica[0], 0);
               insereLO(vetorL, sizeL, verifica[1], 1);
               sizeL += 1;
@@ -411,86 +427,158 @@ int main() {
             break;
           case O:
             if(buscarAlteracao(vetorO, &sizeO, verifica)){
+              printf("MUDOU O\n");
+
               insereLO(vetorO, sizeO, verifica[0], 0);
               insereLO(vetorO, sizeO, verifica[1], 1);
               sizeO += 1;
             }
             break;
         }
+        printf("sizeO: %d\n", sizeO);
+        printf("sizeL: %d\n", sizeL);
+        printf("sizeS: %d\n", sizeS);
+        printf("sizeN: %d\n", sizeN);
 
+        // strcpy(buf.msg, "parabains");
+        // send(sockfd, buf.msg, sizeof(buf.msg), 0);
+        direcao dir;
+        int mandousend = 0;
+        for (int i = 0; i < sizeCar00; i++) {
+          if (i==0) {
+            dir = carrosnaposicao00[i].d;
+          }
+          else{
+            if (carrosnaposicao00[i].d != dir) {
+              printf("chame a ambulancia\n");
+              for (int j = 0; j < sizeCar00; j++) {
+                if (carrosnaposicao00[j].descritor == sockfd) {
+                  bateu(carrosnaposicao00[j].descritor);
+                  mandousend = 1;
+                  /* code */
+                }
+              }
+              break;
+            }
+          }
+        }
+
+        for (int i = 0; i < sizeCar01; i++) {
+          if (i==0) {
+            dir = carrosnaposicao01[i].d;
+          }
+          else{
+            if (carrosnaposicao01[i].d != dir) {
+              printf("chame a ambulancia\n");
+              for (int j = 0; j < sizeCar01; j++) {
+                if (carrosnaposicao01[j].descritor == sockfd) {
+                  bateu(carrosnaposicao01[j].descritor);
+                  mandousend = 1;
+                }
+              }
+              break;
+            }
+          }
+        }
+
+        for (int i = 0; i < sizeCar10; i++) {
+          if (i==0) {
+            dir = carrosnaposicao10[i].d;
+          }
+          else{
+            if (carrosnaposicao10[i].d != dir) {
+              printf("chame a ambulancia\n");
+              for (int j = 0; j < sizeCar10; j++) {
+                if (carrosnaposicao10[j].descritor == sockfd) {
+                  bateu(carrosnaposicao10[j].descritor);
+                  mandousend = 1;
+                }
+              }
+              break;
+            }
+          }
+        }
+
+        for (int i = 0; i < sizeCar11; i++) {
+          if (i==0) {
+            dir = carrosnaposicao11[i].d;
+          }
+          else{
+            if (carrosnaposicao11[i].d != dir) {
+              printf("chame a ambulancia\n");
+              for (int j = 0; j < sizeCar11; j++) {
+                if (carrosnaposicao11[j].descritor == sockfd) {
+                  bateu(carrosnaposicao11[j].descritor);
+                  mandousend = 1;
+                }
+              }
+              break;
+            }
+          }
+        }
+
+
+        char mensagem[MAX_LINE];
+        int flag = 0;
+        for (int i = 0; i < sizeL; i++) {
+          if (vetorL[i][0].ID == sockfd && (flag = evitarColisao(vetorL, vetorN, sizeN, vetorS, sizeS, i, 0, vetorL[i][0].ID))){
+            strcpy(mensagem, "freie");
+            send(vetorL[i][0].ID, mensagem, sizeof(mensagem), 0);
+            strcpy(mensagem, "acelera");
+            mandousend = 1;
+            printf("PARAAAAAAAAA!\n");
+            printf("evitar Colisao\n");
+            if (flag == 1) {
+              sizeS--;
+            }else if (flag == 2) {
+              sizeN--;
+            }
+            sizeL -= removeCarro(vetorL, sizeL, vetorL[i][0].ID);
+            i--;
+          }
+          flag = 0;
+        }
+        for (int i = 0; i < sizeO; i++) {
+          if (vetorL[i][0].ID == sockfd && (flag = evitarColisao(vetorO, vetorN, sizeN, vetorS, sizeS, i, 1, vetorL[i][0].ID))){
+            strcpy(mensagem, "freie");
+            send(vetorL[i][0].ID, mensagem, sizeof(mensagem), 0);
+            strcpy(mensagem, "acelera");
+            mandousend = 1;
+            printf("PARAAAAAAAAA!\n");
+            printf("evitar Colisao\n");
+            if (flag == 1) {
+              sizeS--;
+            }else if (flag == 2) {
+              sizeN--;
+            }
+            sizeO -= removeCarro(vetorO, sizeO, vetorO[i][0].ID);
+            i--;
+          }
+          flag = 0;
+        }
+
+
+
+
+
+        if (mandousend ==0) {
+          char mensagem[MAX_LINE];
+          strcpy(mensagem, "acelere");
+          send(sockfd, mensagem, sizeof(mensagem), 0);
+        }
 
       }
+
+
+
 
       if (--nready <= 0)
         break;				// nao existem mais descritores para serem lidos
       }
 
-      // printf("sizeN: %d\n", sizeN);
-      // printf("sizeS: %d\n", sizeS);
-      // printf("sizeL: %d\n", sizeL);
-      // printf("sizeO: %d\n", sizeO);
-
     }
     // se carrosnaposicao00 tem 2 carros entao temos uma batida, logo mande que eles chamem ambulancia
 
-// FORÇAR BATIDA
-    direcao dir;
-    for (int i = 0; i < sizeCar00; i++) {
-      if (i==0) {
-        dir = carrosnaposicao00[i].d;
-      }
-      else{
-        if (carrosnaposicao00[i].d != dir) {
-          printf("chame a ambulancia\n");
-        }
-      }
-    }
-
-    for (int i = 0; i < sizeCar01; i++) {
-      if (i==0) {
-        dir = carrosnaposicao01[i].d;
-      }
-      else{
-        if (carrosnaposicao01[i].d != dir) {
-          printf("chame a ambulancia\n");
-        }
-      }
-    }
-
-    for (int i = 0; i < sizeCar10; i++) {
-      if (i==0) {
-        dir = carrosnaposicao10[i].d;
-      }
-      else{
-        if (carrosnaposicao10[i].d != dir) {
-          printf("chame a ambulancia\n");
-        }
-      }
-    }
-
-    for (int i = 0; i < sizeCar11; i++) {
-      if (i==0) {
-        dir = carrosnaposicao11[i].d;
-      }
-      else{
-        if (carrosnaposicao11[i].d != dir) {
-          printf("chame a ambulancia\n");
-        }
-      }
-    }
-
-
-
-    for (int i = 0; i < sizeL; i++) {
-      //flag = 0 leste
-      evitarColisao(vetorL, vetorN, sizeN, vetorS, sizeS, i, 0, sockfd);
-    }
-    for (int i = 0; i < sizeO; i++) {
-      evitarColisao(vetorO, vetorN, sizeN, vetorS, sizeS, i, 1, sockfd);
-    }
-
-
-  }
-
+}
   return 0;
 }

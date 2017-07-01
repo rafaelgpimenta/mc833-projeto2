@@ -1,3 +1,6 @@
+#define _POSIX_C_SOURCE 199309L
+#define _GNU_SOURCE
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <strings.h>
@@ -8,13 +11,14 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include "params.h"
 #define SERVER_PORT 12345
 #define MAX_LINE 32
 
 typedef enum direcao {N,S,L,O} direcao;
-typedef enum { seguranca, entreterimento, conforto } tipoServico;
+typedef enum { SEGURANCA, ENTRETERIMENTO, CONFORTO } tipoServico;
 typedef struct pacote{
-    time_t timestamp;
+    struct timespec timestamp;
     double pos; // -30 a 31m (cruzamento nas posições 0 e 1)
     int velocidade; // de 0 a 33m/s
     unsigned short int tam; //de 1 a 30m
@@ -39,21 +43,22 @@ pacote gerarCarro(){
   d = rand() % 4;
 
   if (d == N || d == L)
-    pos = -300;
+    pos = -ROAD_SIZE;
   else
-    pos = 301;
+    pos = ROAD_SIZE+1;
 
-  velocidade = 5 + (rand() % 29);
+  velocidade = 5 + (rand() % MAX_SPEED);
   printf("VELOCIDADE: %d\n", velocidade);
-  tam = 1 + (rand() % 30);
+  tam = 1 + (rand() % MAX_CAR_SIZE);
 
   p.pos = pos;
   p.velocidade = velocidade;
   p.tam = tam;
   p.d = d;
-  p.tipo = seguranca;
+  p.tipo = SEGURANCA;
   memset(p.msg, '\0', sizeof(p.msg));
-  time ( &(p.timestamp) );
+
+  clock_gettime(CLOCK_REALTIME, &(p.timestamp));
   return p;
 }
 int main(int argc, char * argv[])
@@ -65,10 +70,10 @@ int main(int argc, char * argv[])
     pacote buf;
     int s;
     int len;
-
+    int totalBatidas = 0;
     int pid;
-    //so envia pacote colisao se nao passou pelo cruzamento
-    for (int i = 0; i < 50; i++) {
+    //so envia pacote coliao se nao passou pelo cruzamento
+    for (int i = 0; i < CARROS_QTD; i++) {
       pid = fork();
       if (pid == 0)
         break;
@@ -86,12 +91,13 @@ int main(int argc, char * argv[])
         return -1;
     }
 
-    printf("%s = ", host_address->h_name);
+    // printf("%s = ", host_address->h_name);
     while(host_address->h_addr_list[i] != NULL) {
-        printf("%s ", inet_ntoa( *( struct in_addr*)( host_address->h_addr_list[i])));
+      inet_ntoa( *( struct in_addr*)( host_address->h_addr_list[i]));
+        //  printf("%s ", inet_ntoa( *( struct in_addr*)( host_address->h_addr_list[i])));
         i++;
     }
-    printf("\n");
+    // printf("\n");
     /* criação da estrutura de dados de endereço */
     bzero((char *)&socket_address, sizeof(socket_address));
     socket_address.sin_family = AF_INET;
@@ -113,40 +119,55 @@ int main(int argc, char * argv[])
     }
 
     buf = gerarCarro();
+    char mensagem[MAX_LINE];
     while (1) {
-      time_t antes,depois;
-      time ( &(antes) );
+      struct timespec depois;
+      double diffTime;
+      clock_gettime(CLOCK_REALTIME, &(buf.timestamp));
       send(s, (char*)&buf, sizeof(buf), 0);
-      recv(s, (char*)&buf, sizeof(buf), 0);
-      time ( &(depois) );
-      printf("Eco: %s\n", buf.msg);
+      recv(s, mensagem, sizeof(mensagem), 0);
+      printf("Eco: %s\n", mensagem);
+      clock_gettime(CLOCK_REALTIME, &depois);
 
-      if (buf.msg == "freie") {
-        buf.velocidade = 0;
+      if (!strcmp(mensagem, "bateu")) {
+        printf("bateu\n");
+        close(s);
+        break;
       }
 
+
+
+      diffTime = (double)(depois.tv_sec - (buf.timestamp).tv_sec)  +
+                 (double)(depois.tv_nsec - (buf.timestamp).tv_nsec)*1.0e-9;
+      if (!strcmp(mensagem, "freie")) {
+         strcpy(mensagem, "acelera");
+         usleep(1);
+      }
+      printf("direcao = %d\n",buf.d);
+      printf("velocidade = %d\n",buf.velocidade);
+      printf("posicao = %f\n",buf.pos);
       if (buf.d == N || buf.d == L) {
 
-        buf.pos += buf.velocidade*(0.01);
-        // printf("Direcao: %d\n", buf.d);
-        // printf("pos traseira: %f\n", buf.pos - (double)buf.tam);
-        // printf("velocidade %d\n", buf.velocidade);
+        buf.pos += buf.velocidade*diffTime;
+
         if (buf.pos - (double)buf.tam > 0) {
           break;
         }
 
       }
       else{
-        buf.pos -= buf.velocidade*(0.01);
-        // printf("Direcao: %d\n", buf.d);
-        // printf("pos traseira: %f\n", buf.pos + (double)buf.tam);
-        // printf("velocidade %d\n", buf.velocidade);
+        buf.pos -= buf.velocidade*diffTime;
+
         if (buf.pos + (double)buf.tam < 0) {
           break;
         }
       }
-    }
 
+
+
+
+    }
+    // printf("velocidade = %d\n",buf.velocidade);
     close(s);
     return 0;
 
