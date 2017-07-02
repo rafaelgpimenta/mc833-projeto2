@@ -15,8 +15,8 @@
 #include "params.h"
 #include<pthread.h>
 
-#define LISTEN_PORT 12345
-#define MAX_PENDING 400
+#define LISTEN_PORT 12346
+#define MAX_PENDING 10000
 #define MAX_LINE 32
 
 typedef enum direcao {N,S,L,O} direcao;
@@ -55,14 +55,14 @@ int infoPeer(int new_s){
   struct sockaddr_storage addr;
   socklen_t lenPeer = sizeof(addr);
   if (getpeername(new_s, (struct sockaddr *) &addr, &lenPeer) == -1) {
-    printf("Erro ao gettar o peer name\n");
+    //printf("Erro ao gettar o peer name\n");
     return -1;
   }
   struct sockaddr_in *soc = (struct sockaddr_in *)&addr;
   char ipstr[INET_ADDRSTRLEN];
   int port = ntohs(soc->sin_port);
   inet_ntop(AF_INET, &soc->sin_addr, ipstr, sizeof ipstr);
-  printf("IP:porta = %s:%d\n", ipstr, port);
+  //printf("IP:porta = %s:%d\n", ipstr, port);
   return 0;
 }
 
@@ -146,7 +146,7 @@ int evitarColisao(pairTime (*vetor)[2], pairTime (*vetorN)[2], int sizeN, pairTi
         (vetor[cl][1].inicio >= vetorN[i][flag].inicio && vetor[cl][1].fim >= vetorN[i][flag].fim)) {
           // strcpy(mensagem, "freie");
           // send(sockfd, mensagem, sizeof(mensagem), 0);
-          // printf("PARAAAAAAAAA!\n");
+          // //printf("PARAAAAAAAAA!\n");
           removeCarro(vetorN,sizeN,vetorN[i][flag].ID);
           return 2;
     }
@@ -177,6 +177,7 @@ void bateu(int sockfd) {
 }
 
 int main() {
+  int tiposeg = 0, tipoent = 0, tipoconf = 0, batidas = 0, frenagens = 0;
   struct sockaddr_in socket_address;
   pacote buf;
   unsigned int len;
@@ -194,7 +195,7 @@ int main() {
     /* criação de socket passivo */
   s = socket(AF_INET, SOCK_STREAM, 0);
   if(s == -1) {
-    printf("Erro na alocacao do socket\n");
+    //printf("Erro na alocacao do socket\n");
     return -1;
   }
 
@@ -204,7 +205,7 @@ int main() {
 
      /* Criar escuta do socket para aceitar conexões */
   if(listen(s, MAX_PENDING) == -1) {
-    printf("Erro ao criar escuta para aceitar conexao\n");
+    //printf("Erro ao criar escuta para aceitar conexao\n");
     return -1;
   }
 
@@ -255,22 +256,22 @@ int main() {
         continue;			// nao existem mais descritores para serem lidos
     }
 
-    pairTime vetorN[cliente_num][2], vetorS[cliente_num][2], vetorL[cliente_num][2],vetorO[cliente_num][2];
+    pairTime vetorN[cliente_num+1][2], vetorS[cliente_num+1][2], vetorL[cliente_num+1][2],vetorO[cliente_num+1][2];
 
-    cruzamento carrosnaposicao00[cliente_num], carrosnaposicao01[cliente_num], carrosnaposicao10[cliente_num], carrosnaposicao11[cliente_num];
+    cruzamento carrosnaposicao00[cliente_num+1], carrosnaposicao01[cliente_num+1], carrosnaposicao10[cliente_num+1], carrosnaposicao11[cliente_num+1];
     int sizeCar00 = 0, sizeCar01 = 0, sizeCar10 = 0, sizeCar11 = 0;
     for (i = 0; i <= cliente_num; i++) {	// verificar se há dados em todos os clientes
+      int mandousend = 0;
+
       c[i].recebeu = false;
       if ( (sockfd = c[i].descritor) < 0)
         continue;
       if (FD_ISSET(sockfd, &novo_set)) {
         if ( (len = recv(sockfd, &buf, sizeof(buf), 0)) == 0) {
-          printf("removeu Carro\n");
+          //printf("removeu Carro\n");
 
-          if (removeCarro(vetorN, sizeN, sockfd) != 0){
-            printf("removeu Carro N\n");
+          if (removeCarro(vetorN, sizeN, sockfd))
             sizeN -= 1;
-          }
           else if (removeCarro(vetorS, sizeS, sockfd))
             sizeS -= 1;
           else if (removeCarro(vetorL, sizeL, sockfd))
@@ -287,16 +288,21 @@ int main() {
         pthread_t my_thread;
         if (buf.tipo == ENTRETERIMENTO) {
           pthread_create(&my_thread, NULL, divirta_se, (void *)&sockfd);
+          tipoent++;
+          continue;
         }
         else if (buf.tipo == CONFORTO) {
           pthread_create(&my_thread, NULL, conforte_se, (void *)&sockfd);
+          tipoconf++;
+          continue;
         }
+        tiposeg++;
         usleep(10000);
         pairTime verifica[2];
         double distancia, dv;
         c[i].recebeu = true;
         // infoPeer(sockfd);
-        printf("velocidade do cliente: %d\n", buf.velocidade);
+        //printf("velocidade do cliente: %d\n", buf.velocidade);
 
         switch (buf.d) {
           case N:
@@ -363,6 +369,32 @@ int main() {
         distancia = (buf.d == N || buf.d == L) ? - buf.pos : buf.pos;
         dv = 1 / buf.velocidade;
 
+        // ja passou do cruzamento esquece esse carro
+        if (verifica[0].fim < 0 && verifica[1].fim < 0) {
+          switch (buf.d) {
+            case N:
+            //printf("N passou do cruzamento\n");
+            sizeN -= removeCarro(vetorN, sizeN, sockfd);
+            break;
+            case S:
+            //printf("S passou do cruzamento\n");
+            sizeS -= removeCarro(vetorS, sizeS, sockfd);
+            break;
+            case L:
+            sizeL -= removeCarro(vetorL, sizeL, sockfd);
+            break;
+            case O:
+            sizeO -= removeCarro(vetorO, sizeO, sockfd);
+            break;
+          }
+          char mensagem[MAX_LINE];
+          strcpy(mensagem, "passou");
+          //printf("%s\n", mensagem);
+          send(sockfd, mensagem, sizeof(mensagem), 0);
+          strcpy(mensagem, "acelera");
+          mandousend = 1;
+          continue;
+        }
         double timestampSEC = (double)((buf.timestamp).tv_sec) + (double)((buf.timestamp).tv_nsec) / 1.0e9;
 
         //carros em direcao ao norte e leste atigem ponto 0 primeiro (na visao de suas respectivas coordenadas)
@@ -376,32 +408,12 @@ int main() {
         verifica[1].fim    = timestampSEC + ((buf.d == N || buf.d == L) ? verifica[0].fim + dv
                                                       : verifica[0].fim - dv);
 
-        // ja passou do cruzamento esquece esse carro
-        if (verifica[0].fim < 0 && verifica[1].fim < 0) {
-          switch (buf.d) {
-            case N:
-            printf("N passou do cruzamento\n");
-              sizeN -= removeCarro(vetorN, sizeN, sockfd);
-            break;
-            case S:
-            printf("S passou do cruzamento\n");
-              sizeS -= removeCarro(vetorS, sizeS, sockfd);
-            break;
-            case L:
-              sizeL -= removeCarro(vetorL, sizeL, sockfd);
-            break;
-            case O:
-              sizeO -= removeCarro(vetorO, sizeO, sockfd);
-            break;
-          }
-          continue;
-        }
 
         switch (buf.d) {
           case N:
             // ver se alguem mudou o tempo de chegada ao cruzamento
             if(buscarAlteracao(vetorN, &sizeN, verifica)){
-              printf("MUDOU N\n");
+              //printf("MUDOU N\n");
               insereNS(vetorN, sizeN, verifica[0], 0);
               insereNS(vetorN, sizeN, verifica[1], 1);
               sizeN += 1;
@@ -409,7 +421,7 @@ int main() {
             break;
           case S:
             if(buscarAlteracao(vetorS, &sizeS, verifica)){
-              printf("MUDOU S\n");
+              //printf("MUDOU S\n");
 
               insereNS(vetorS, sizeS, verifica[0], 0);
               insereNS(vetorS, sizeS, verifica[1], 1);
@@ -418,7 +430,7 @@ int main() {
             break;
           case L:
             if(buscarAlteracao(vetorL, &sizeL, verifica)){
-              printf("MUDOU L\n");
+              //printf("MUDOU L\n");
 
               insereLO(vetorL, sizeL, verifica[0], 0);
               insereLO(vetorL, sizeL, verifica[1], 1);
@@ -427,7 +439,7 @@ int main() {
             break;
           case O:
             if(buscarAlteracao(vetorO, &sizeO, verifica)){
-              printf("MUDOU O\n");
+              //printf("MUDOU O\n");
 
               insereLO(vetorO, sizeO, verifica[0], 0);
               insereLO(vetorO, sizeO, verifica[1], 1);
@@ -435,25 +447,25 @@ int main() {
             }
             break;
         }
-        printf("sizeO: %d\n", sizeO);
-        printf("sizeL: %d\n", sizeL);
-        printf("sizeS: %d\n", sizeS);
-        printf("sizeN: %d\n", sizeN);
+        //printf("sizeO: %d\n", sizeO);
+        //printf("sizeL: %d\n", sizeL);
+        //printf("sizeS: %d\n", sizeS);
+        //printf("sizeN: %d\n", sizeN);
 
         // strcpy(buf.msg, "parabains");
         // send(sockfd, buf.msg, sizeof(buf.msg), 0);
         direcao dir;
-        int mandousend = 0;
         for (int i = 0; i < sizeCar00; i++) {
           if (i==0) {
             dir = carrosnaposicao00[i].d;
           }
           else{
             if (carrosnaposicao00[i].d != dir) {
-              printf("chame a ambulancia\n");
+              //printf("chame a ambulancia\n");
               for (int j = 0; j < sizeCar00; j++) {
                 if (carrosnaposicao00[j].descritor == sockfd) {
                   bateu(carrosnaposicao00[j].descritor);
+                  batidas++;
                   mandousend = 1;
                   /* code */
                 }
@@ -469,10 +481,11 @@ int main() {
           }
           else{
             if (carrosnaposicao01[i].d != dir) {
-              printf("chame a ambulancia\n");
+              //printf("chame a ambulancia\n");
               for (int j = 0; j < sizeCar01; j++) {
                 if (carrosnaposicao01[j].descritor == sockfd) {
                   bateu(carrosnaposicao01[j].descritor);
+                  batidas++;
                   mandousend = 1;
                 }
               }
@@ -487,10 +500,11 @@ int main() {
           }
           else{
             if (carrosnaposicao10[i].d != dir) {
-              printf("chame a ambulancia\n");
+              //printf("chame a ambulancia\n");
               for (int j = 0; j < sizeCar10; j++) {
                 if (carrosnaposicao10[j].descritor == sockfd) {
                   bateu(carrosnaposicao10[j].descritor);
+                  batidas++;
                   mandousend = 1;
                 }
               }
@@ -505,10 +519,11 @@ int main() {
           }
           else{
             if (carrosnaposicao11[i].d != dir) {
-              printf("chame a ambulancia\n");
+              //printf("chame a ambulancia\n");
               for (int j = 0; j < sizeCar11; j++) {
                 if (carrosnaposicao11[j].descritor == sockfd) {
                   bateu(carrosnaposicao11[j].descritor);
+                  batidas++;
                   mandousend = 1;
                 }
               }
@@ -523,11 +538,12 @@ int main() {
         for (int i = 0; i < sizeL; i++) {
           if (vetorL[i][0].ID == sockfd && (flag = evitarColisao(vetorL, vetorN, sizeN, vetorS, sizeS, i, 0, vetorL[i][0].ID))){
             strcpy(mensagem, "freie");
+            frenagens++;
             send(vetorL[i][0].ID, mensagem, sizeof(mensagem), 0);
             strcpy(mensagem, "acelera");
             mandousend = 1;
-            printf("PARAAAAAAAAA!\n");
-            printf("evitar Colisao\n");
+            //printf("PARAAAAAAAAA!\n");
+            //printf("evitar Colisao\n");
             if (flag == 1) {
               sizeS--;
             }else if (flag == 2) {
@@ -539,13 +555,14 @@ int main() {
           flag = 0;
         }
         for (int i = 0; i < sizeO; i++) {
-          if (vetorL[i][0].ID == sockfd && (flag = evitarColisao(vetorO, vetorN, sizeN, vetorS, sizeS, i, 1, vetorL[i][0].ID))){
+          if (vetorO[i][0].ID == sockfd && (flag = evitarColisao(vetorO, vetorN, sizeN, vetorS, sizeS, i, 1, vetorO[i][0].ID))){
             strcpy(mensagem, "freie");
-            send(vetorL[i][0].ID, mensagem, sizeof(mensagem), 0);
+            frenagens++;
+            send(vetorO[i][0].ID, mensagem, sizeof(mensagem), 0);
             strcpy(mensagem, "acelera");
             mandousend = 1;
-            printf("PARAAAAAAAAA!\n");
-            printf("evitar Colisao\n");
+            //printf("PARAAAAAAAAA!\n");
+            //printf("evitar Colisao\n");
             if (flag == 1) {
               sizeS--;
             }else if (flag == 2) {
@@ -563,14 +580,17 @@ int main() {
 
         if (mandousend ==0) {
           char mensagem[MAX_LINE];
-          strcpy(mensagem, "acelere");
+          strcpy(mensagem, "acelera");
           send(sockfd, mensagem, sizeof(mensagem), 0);
         }
 
       }
 
-
-
+      printf("batidas: %d\n", batidas);
+      printf("frenagens: %d\n", frenagens);
+      printf("pacotes CONFORTO: %d\n", tipoconf);
+      printf("pacotes ENTRETERIMENTO: %d\n", tipoent);
+      printf("pacotes SEGURANCA: %d\n", tiposeg);
 
       if (--nready <= 0)
         break;				// nao existem mais descritores para serem lidos
@@ -579,6 +599,6 @@ int main() {
     }
     // se carrosnaposicao00 tem 2 carros entao temos uma batida, logo mande que eles chamem ambulancia
 
-}
+  }
   return 0;
 }

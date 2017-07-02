@@ -12,7 +12,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "params.h"
-#define SERVER_PORT 12345
+#define SERVER_PORT 12346
 #define MAX_LINE 32
 
 typedef enum direcao {N,S,L,O} direcao;
@@ -47,8 +47,8 @@ pacote gerarCarro(){
   else
     pos = ROAD_SIZE+1;
 
-  velocidade = 5 + (rand() % MAX_SPEED);
-  printf("VELOCIDADE: %d\n", velocidade);
+  velocidade = rand() % (MAX_SPEED + 1 - MIN_SPEED) + MIN_SPEED;
+  //printf("VELOCIDADE: %d\n", velocidade);
   tam = 1 + (rand() % MAX_CAR_SIZE);
 
   p.pos = pos;
@@ -70,7 +70,6 @@ int main(int argc, char * argv[])
     pacote buf;
     int s;
     int len;
-    int totalBatidas = 0;
     int pid;
     //so envia pacote coliao se nao passou pelo cruzamento
     for (int i = 0; i < CARROS_QTD; i++) {
@@ -80,24 +79,24 @@ int main(int argc, char * argv[])
     }
 	 /* verificação de argumentos */
 	 if (argc != 2) {
-        printf("Numero incorreto de argumentos\n");
+        //printf("Numero incorreto de argumentos\n");
         return -1;
     }
     host = argv[1];
     /* tradução de nome para endereço IP */
     host_address = gethostbyname(host);
     if(host_address == NULL) {
-        printf("Nao foi possivel resolver o nome\n");
+        //printf("Nao foi possivel resolver o nome\n");
         return -1;
     }
 
-    // printf("%s = ", host_address->h_name);
+    // //printf("%s = ", host_address->h_name);
     while(host_address->h_addr_list[i] != NULL) {
       inet_ntoa( *( struct in_addr*)( host_address->h_addr_list[i]));
-        //  printf("%s ", inet_ntoa( *( struct in_addr*)( host_address->h_addr_list[i])));
+        //  //printf("%s ", inet_ntoa( *( struct in_addr*)( host_address->h_addr_list[i])));
         i++;
     }
-    // printf("\n");
+    // //printf("\n");
     /* criação da estrutura de dados de endereço */
     bzero((char *)&socket_address, sizeof(socket_address));
     socket_address.sin_family = AF_INET;
@@ -108,13 +107,13 @@ int main(int argc, char * argv[])
     /* criação de socket ativo*/
     s = socket(AF_INET, SOCK_STREAM, 0);
     if(s == -1) {
-        printf("Erro na alocacao do socket\n");
+        //printf("Erro na alocacao do socket\n");
         return -1;
     }
     /* estabelecimento da conexão */
     len = sizeof(socket_address);
     if(connect(s, (struct sockaddr *) &socket_address, len) == -1) {
-        printf("Erro no estabelecimento da conexao\n");
+        //printf("Erro no estabelecimento da conexao\n");
         return -1;
     }
 
@@ -124,14 +123,17 @@ int main(int argc, char * argv[])
       struct timespec depois;
       double diffTime;
       clock_gettime(CLOCK_REALTIME, &(buf.timestamp));
+      //printf("direcao = %d\n",buf.d);
+      //printf("velocidade = %d\n",buf.velocidade);
+      //printf("posicao = %f\n",buf.pos);
+      //printf("tam = %u\n",buf.tam);
       send(s, (char*)&buf, sizeof(buf), 0);
       recv(s, mensagem, sizeof(mensagem), 0);
-      printf("Eco: %s\n", mensagem);
+      //printf("Eco: %s\n", mensagem);
       clock_gettime(CLOCK_REALTIME, &depois);
 
-      if (!strcmp(mensagem, "bateu")) {
-        printf("bateu\n");
-        close(s);
+      if (!strcmp(mensagem, "bateu") || !strcmp(mensagem, "passou")) {
+        //printf("%s\n",mensagem);
         break;
       }
 
@@ -140,34 +142,49 @@ int main(int argc, char * argv[])
       diffTime = (double)(depois.tv_sec - (buf.timestamp).tv_sec)  +
                  (double)(depois.tv_nsec - (buf.timestamp).tv_nsec)*1.0e-9;
       if (!strcmp(mensagem, "freie")) {
-         strcpy(mensagem, "acelera");
+         strcpy(mensagem, "acelere");
          usleep(1);
       }
-      printf("direcao = %d\n",buf.d);
-      printf("velocidade = %d\n",buf.velocidade);
-      printf("posicao = %f\n",buf.pos);
+
       if (buf.d == N || buf.d == L) {
 
         buf.pos += buf.velocidade*diffTime;
-
-        if (buf.pos - (double)buf.tam > 0) {
+        //printf("diferenca %f\n", (buf.pos - (double)buf.tam));
+        if (buf.pos - (double)buf.tam > 1) {
           break;
         }
 
       }
       else{
         buf.pos -= buf.velocidade*diffTime;
-
+        //printf("diferenca %f\n", (buf.pos + (double)buf.tam));
         if (buf.pos + (double)buf.tam < 0) {
           break;
         }
       }
 
+      unsigned int randval;
+      FILE *f;
+      int tipoProximoPacote;
+      f = fopen("/dev/random", "r");
+      fread(&randval, sizeof(randval), 1, f);
+      fclose(f);
 
+      srand( randval );
+      // 1/3, 2/4, 3/5, 4/6, 5/7
+      tipoProximoPacote = rand() % PROB_SEGURANCA;
+      if (tipoProximoPacote == 0) {
+        buf.tipo = ENTRETERIMENTO;
+      } else if (tipoProximoPacote == 1) {
+        buf.tipo = CONFORTO;
+      } else {
+        buf.tipo = SEGURANCA;
+      }
 
+      usleep(PKG_INTEVAL);
 
     }
-    // printf("velocidade = %d\n",buf.velocidade);
+    // //printf("velocidade = %d\n",buf.velocidade);
     close(s);
     return 0;
 
